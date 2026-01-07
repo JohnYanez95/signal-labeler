@@ -1,0 +1,194 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          pip install bandit
+
+      - name: Security scan (Bandit)
+        run: |
+          echo "Running security scan..."
+          bandit -r backend/app backend/backends backend/sync -ll -ii
+          echo "✅ Security scan passed"
+
+      - name: Check Python syntax
+        run: |
+          echo "Checking Python syntax..."
+          find backend -name "*.py" -exec python -m py_compile {} \;
+          echo "✅ All Python files compile successfully"
+
+      - name: Validate project structure
+        run: |
+          echo "Validating backend structure..."
+
+          # Check required directories
+          for dir in backend/app backend/backends backend/sync; do
+            if [ -d "$dir" ]; then
+              echo "✅ $dir/ exists"
+            else
+              echo "❌ $dir/ missing"
+              exit 1
+            fi
+          done
+
+          # Check required files
+          for file in backend/app/main.py backend/requirements.txt backend/Dockerfile; do
+            if [ -f "$file" ]; then
+              echo "✅ $file exists"
+            else
+              echo "❌ $file missing"
+              exit 1
+            fi
+          done
+
+      - name: Validate imports
+        run: |
+          echo "Validating Python imports..."
+          cd backend
+          python << 'PYTHON_SCRIPT'
+          import sys
+          try:
+              # Test core imports (without Spark - too heavy for CI)
+              from app.models import LabelVote, SampleRunsRequest
+              print("✅ app.models imports successfully")
+
+              from app.config import settings
+              print("✅ app.config imports successfully")
+
+              from backends.sqlite.connection import get_db_connection
+              print("✅ backends.sqlite imports successfully")
+
+          except Exception as e:
+              print(f"❌ Import validation failed: {e}")
+              sys.exit(1)
+          PYTHON_SCRIPT
+
+  frontend:
+    name: Frontend Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: TypeScript type check
+        run: |
+          cd frontend
+          npx tsc --noEmit
+          echo "✅ TypeScript type check passed"
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+          echo "✅ Frontend build successful"
+
+      - name: Check bundle size
+        run: |
+          cd frontend
+          # Report build output size
+          echo "Build output:"
+          du -sh dist/
+          du -sh dist/assets/
+
+  docker:
+    name: Docker Build Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate docker-compose.yml
+        run: |
+          docker compose config > /dev/null
+          echo "✅ docker-compose.yml is valid"
+
+      - name: Build backend image
+        run: |
+          docker build -t labeler-backend ./backend
+          echo "✅ Backend Docker image builds successfully"
+
+      - name: Build frontend image
+        run: |
+          docker build -t labeler-frontend ./frontend
+          echo "✅ Frontend Docker image builds successfully"
+
+  docs:
+    name: Documentation Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required documentation
+        run: |
+          echo "Checking documentation..."
+
+          for file in README.md CLAUDE.md LICENSE; do
+            if [ -f "$file" ] && [ -s "$file" ]; then
+              echo "✅ $file exists and has content"
+            else
+              echo "❌ $file missing or empty"
+              exit 1
+            fi
+          done
+
+      - name: Validate Mermaid diagrams syntax
+        run: |
+          echo "Checking Mermaid diagrams in README files..."
+
+          # Count mermaid blocks
+          mermaid_count=$(grep -r '```mermaid' *.md backend/*.md frontend/*.md 2>/dev/null | wc -l)
+          echo "Found $mermaid_count Mermaid diagram(s)"
+
+          # Check that mermaid blocks are properly closed
+          for file in README.md backend/README.md frontend/README.md; do
+            if [ -f "$file" ]; then
+              opens=$(grep -c '```mermaid' "$file" || true)
+              closes=$(grep -c '```$' "$file" || true)
+              if [ "$opens" -le "$closes" ]; then
+                echo "✅ $file has balanced code blocks"
+              else
+                echo "⚠️ $file may have unclosed code blocks"
+              fi
+            fi
+          done

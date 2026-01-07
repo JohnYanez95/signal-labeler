@@ -1,0 +1,32 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+      - "4040:4040"   # Spark UI
+    volumes:
+      - ./backend/data:/app/data
+      - backend_db:/app/db
+    environment:
+      - CORS_ORIGINS=*
+      - DATABASE_PATH=/app/db/labeler.db
+      - SYNC_DELTA_TABLE_PATH=/app/data/delta
+      # Spark memory settings (increase for large datasets)
+      - SPARK_DRIVER_MEMORY=32g
+      - SPARK_EXECUTOR_MEMORY=16g
+      # Set your name for autofill (optional, defaults to system username)
+      - LABELER_NAME=John Y.
+    deploy:
+      resources:
+        limits:
+          memory: 48g
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  backend_db:
