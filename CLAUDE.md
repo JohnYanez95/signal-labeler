@@ -156,24 +156,34 @@ frontend/src/
 ## Keyboard Shortcuts
 
 ### Navigation & Labeling
-- `←` / `→` or `T` / `G` - Navigate runs
-- `N` - Jump to last run
+- `←` / `→` or `J` / `L` - Navigate runs
+- `H` - Jump to first unlabeled run
+- `N` - Jump to last unlabeled run
+- `Ctrl+Z` - Go back to previous labeled run
 - `1` / `2` / `3` - Label (Class A / Class B / Error)
 - `Ctrl+Enter` - Load runs (when devices found in filter)
 
 ### Chart Controls
-- `Q` / `E` - Slide time window
-- `A` - Auto Scale (Y-axis follows visible data)
-- `S` - Full Scale (Y-axis covers entire series)
+- `A` / `D` - Slide time window left/right
+- `U` - Shrink left boundary (inward)
+- `O` - Shrink right boundary (inward)
+- `Q` - Expand left boundary (outward)
+- `E` - Expand right boundary (outward)
+- `S` - Auto Scale (Y-axis follows visible data)
+- `F` - Full Scale (Y-axis covers entire series)
 - `C` - Colorblind mode (amber/blue palette)
 - `R` - Reset view
 - `Ctrl+Z` - Undo zoom
 
 ### Session
-- `Space` / `Esc` - Early exit confirmation
-- `Y` - Push to Delta (in modal)
-- `N` - Save for later (in modal)
+- `Space` / `Esc` - Early exit (shows submit prompt if all runs labeled)
+- `Y` / `Space` - Push to Delta (in submit prompt)
+- `N` / `Esc` - Save for later (in submit prompt)
 - `?` - Hotkey guide
+
+### Session Selection Screen
+- `Y` - Push session to Delta (in push confirm dialog)
+- `Esc` - Cancel (in push confirm dialog)
 
 ## Session Management
 
