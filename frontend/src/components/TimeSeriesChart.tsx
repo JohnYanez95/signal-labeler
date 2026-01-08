@@ -914,6 +914,8 @@ export function TimeSeriesChart({ data, title, globalYMax }: TimeSeriesChartProp
         ref={chartRef}
         option={option}
         style={{ height: '100%', width: '100%' }}
+        lazyUpdate={true}
+        notMerge={false}
         onChartReady={onChartReady}
         onEvents={{
           dataZoom: (params: any) => {
