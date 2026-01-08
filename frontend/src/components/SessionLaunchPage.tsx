@@ -100,6 +100,47 @@ export function SessionLaunchPage({
     }
   }, [refreshTrigger]);
 
+  // Keyboard shortcuts for modals
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Y/Esc when push confirm modal is shown
+      if (showPushConfirm && !actionLoading) {
+        if (event.key === 'y' || event.key === 'Y' || event.key === 'Enter') {
+          event.preventDefault();
+          handlePushSession(showPushConfirm);
+        } else if (event.key === 'Escape' || event.key === 'n' || event.key === 'N') {
+          event.preventDefault();
+          setShowPushConfirm(null);
+        }
+        return;
+      }
+
+      // Y/Esc when delete confirm modal is shown
+      if (showDeleteConfirm && !actionLoading) {
+        if (event.key === 'y' || event.key === 'Y' || event.key === 'Enter') {
+          event.preventDefault();
+          handleDeleteSession(showDeleteConfirm);
+        } else if (event.key === 'Escape' || event.key === 'n' || event.key === 'N') {
+          event.preventDefault();
+          setShowDeleteConfirm(null);
+        }
+        return;
+      }
+
+      // Esc to close max sessions modal
+      if (showMaxReachedModal) {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          setShowMaxReachedModal(false);
+        }
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showPushConfirm, showDeleteConfirm, showMaxReachedModal, actionLoading]);
+
   const handleNewSessionClick = () => {
     if (sessions.length >= maxSessions) {
       setShowMaxReachedModal(true);
@@ -616,7 +657,7 @@ export function SessionLaunchPage({
                   cursor: 'pointer',
                 }}
               >
-                Cancel
+                Cancel (Esc)
               </button>
               <button
                 onClick={() => handlePushSession(showPushConfirm)}
@@ -629,7 +670,7 @@ export function SessionLaunchPage({
                   cursor: 'pointer',
                 }}
               >
-                Push
+                Push (Y)
               </button>
             </div>
           </div>
@@ -678,7 +719,7 @@ export function SessionLaunchPage({
                   cursor: 'pointer',
                 }}
               >
-                Cancel
+                Cancel (Esc)
               </button>
               <button
                 onClick={() => handleDeleteSession(showDeleteConfirm)}
@@ -691,7 +732,7 @@ export function SessionLaunchPage({
                   cursor: 'pointer',
                 }}
               >
-                Delete
+                Delete (Y)
               </button>
             </div>
           </div>

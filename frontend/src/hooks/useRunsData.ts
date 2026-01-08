@@ -20,6 +20,9 @@ export function useRunsData() {
   // RAM cache for all runs with timeseries (preloaded on session start)
   const runsCache = useRef<Map<string, Run>>(new Map());
 
+  // Abort controller for cancelling preload on session end
+  const preloadAbortRef = useRef<AbortController | null>(null);
+
   const loadRuns = async (
     deviceId: string,
     startTs: number,
@@ -110,54 +113,87 @@ export function useRunsData() {
     sessionId: string,
     onProgress?: (loaded: number, total: number) => void
   ) => {
+    // Cancel any existing preload
+    preloadAbortRef.current?.abort();
+    preloadAbortRef.current = new AbortController();
+    const signal = preloadAbortRef.current.signal;
+
     const total = runIds.length;
     let loaded = 0;
 
-    // Fetch all runs in parallel batches (limit concurrency to avoid overwhelming server)
-    const BATCH_SIZE = 10;
+    // Fetch all runs in parallel batches (adapt to device capability)
+    const BATCH_SIZE = (navigator.hardwareConcurrency || 4) > 4 ? 10 : 5;
     for (let i = 0; i < runIds.length; i += BATCH_SIZE) {
+      // Exit early if aborted (session ended)
+      if (signal.aborted) return;
+
       const batch = runIds.slice(i, i + BATCH_SIZE);
       const promises = batch.map(async (runId) => {
-        // Skip if already in cache
-        if (runsCache.current.has(runId)) {
+        // Skip if already in cache or aborted
+        if (runsCache.current.has(runId) || signal.aborted) {
           loaded++;
           return;
         }
         try {
           const run = await api.getSessionRunDetail(sessionId, runId, modelType);
-          runsCache.current.set(runId, run);
-          loaded++;
-          onProgress?.(loaded, total);
+          // Don't update cache if aborted while fetching
+          if (!signal.aborted) {
+            runsCache.current.set(runId, run);
+            loaded++;
+            onProgress?.(loaded, total);
+          }
         } catch (err) {
-          console.error(`Failed to preload run ${runId}:`, err);
+          // Ignore errors if aborted (expected 404s)
+          if (!signal.aborted) {
+            console.error(`Failed to preload run ${runId}:`, err);
+          }
         }
       });
       await Promise.all(promises);
     }
   }, []);
 
-  const goToNext = useCallback(async (modelType: string, sessionId?: string) => {
+  const goToNext = useCallback((modelType: string, sessionId?: string) => {
     if (currentIndex < runs.length - 1) {
       const nextIndex = currentIndex + 1;
+      const targetRunId = runs[nextIndex].run_id;
       setCurrentIndex(nextIndex);
-      await loadCurrentRun(runs[nextIndex].run_id, modelType, sessionId);
+      // Check cache synchronously for instant navigation
+      const cached = runsCache.current.get(targetRunId);
+      if (cached) {
+        setCurrentRun(cached);
+      } else {
+        loadCurrentRun(targetRunId, modelType, sessionId);
+      }
     }
   }, [currentIndex, runs]);
 
-  const goToPrevious = useCallback(async (modelType: string, sessionId?: string) => {
+  const goToPrevious = useCallback((modelType: string, sessionId?: string) => {
     if (currentIndex > 0) {
       const prevIndex = currentIndex - 1;
+      const targetRunId = runs[prevIndex].run_id;
       setCurrentIndex(prevIndex);
-      await loadCurrentRun(runs[prevIndex].run_id, modelType, sessionId);
+      // Check cache synchronously for instant navigation
+      const cached = runsCache.current.get(targetRunId);
+      if (cached) {
+        setCurrentRun(cached);
+      } else {
+        loadCurrentRun(targetRunId, modelType, sessionId);
+      }
     }
   }, [currentIndex, runs]);
 
-  const goToIndex = useCallback(async (index: number, modelType: string, sessionId?: string, runId?: string) => {
+  const goToIndex = useCallback((index: number, modelType: string, sessionId?: string, runId?: string) => {
     if (index >= 0 && index < runs.length) {
       setCurrentIndex(index);
-      // Use provided runId if available (avoids stale closure issues), otherwise lookup from runs
       const targetRunId = runId || runs[index].run_id;
-      await loadCurrentRun(targetRunId, modelType, sessionId);
+      // Check cache synchronously for instant navigation
+      const cached = runsCache.current.get(targetRunId);
+      if (cached) {
+        setCurrentRun(cached);
+      } else {
+        loadCurrentRun(targetRunId, modelType, sessionId);
+      }
     }
   }, [runs]);
 
@@ -249,6 +285,10 @@ export function useRunsData() {
 
   // Clear session state
   const clearSession = () => {
+    // Cancel any in-flight preloading
+    preloadAbortRef.current?.abort();
+    preloadAbortRef.current = null;
+
     setRuns([]);
     setCurrentIndex(0);
     setCurrentRun(null);
