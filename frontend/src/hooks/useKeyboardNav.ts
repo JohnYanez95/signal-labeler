@@ -27,14 +27,14 @@ export function useKeyboardNav({ onPrevious, onNext, onLabel, enabled }: UseKeyb
 
       switch (event.key) {
         case 'ArrowLeft':
-        case 't':
-        case 'T':
+        case 'j':
+        case 'J':
           event.preventDefault();
           onPrevious();
           break;
         case 'ArrowRight':
-        case 'g':
-        case 'G':
+        case 'l':
+        case 'L':
           event.preventDefault();
           onNext();
           break;
