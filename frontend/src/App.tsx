@@ -1788,6 +1788,7 @@ function App() {
 
               <div style={styles.chartContainer}>
                 <TimeSeriesChart
+                  key={currentRun.run_id}
                   data={currentRun.timeseries}
                   title={`Run ${currentDeviceIndex + 1} of ${currentDeviceRuns.length} (Device: ${currentRun.device_id})`}
                   globalYMax={globalYMax}
