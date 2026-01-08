@@ -81,7 +81,7 @@ sequenceDiagram
     App->>App: userLabels.set(run_id, 0)
     App->>API: POST /api/labels
     App->>LS: Save session state
-    App->>App: Auto-advance to next run
+    App->>App: Auto-advance to next unlabeled run
     API-->>App: {success: true}
 ```
 
@@ -135,8 +135,27 @@ VITE_API_BASE_URL=http://localhost:8000
 
 ## Keyboard Shortcuts
 
-- **← (Left)**: Previous run
-- **→ (Right)**: Next run
-- **0**: Class A label
-- **1**: Class B label
-- **2**: Invalid label
+### Navigation
+- **←/→** or **J/L**: Navigate runs
+- **H**: Jump to first unlabeled run
+- **N**: Jump to last unlabeled run
+- **Ctrl+Z**: Go back to previous labeled run
+
+### Labeling
+- **1**: Class A label
+- **2**: Class B label
+- **3**: Invalid label
+
+### Chart Controls
+- **A/D**: Slide time window
+- **Q/E**: Expand boundaries
+- **U/O**: Shrink boundaries
+- **S**: Auto scale Y-axis
+- **F**: Full scale Y-axis
+- **C**: Colorblind mode
+- **R**: Reset view
+- **Ctrl+Z**: Undo zoom
+
+### Session
+- **Space/Esc**: Early exit
+- **?**: Show all shortcuts

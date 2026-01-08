@@ -194,19 +194,34 @@ sequenceDiagram
 
 ## Keyboard Shortcuts
 
+### Navigation & Labeling
 | Key | Action |
 |-----|--------|
-| `←` / `→` or `T` / `G` | Navigate runs |
-| `N` | Jump to last run |
+| `←` / `→` or `J` / `L` | Navigate runs |
+| `H` | Jump to first unlabeled run |
+| `N` | Jump to last unlabeled run |
+| `Ctrl+Z` | Go back to previous labeled run |
 | `1` `2` `3` | Apply label (Class A / Class B / Invalid) |
 | `Ctrl+Enter` | Load runs (from device filter) |
-| `Q` / `E` | Slide time window |
-| `A` | Auto scale Y-axis |
-| `S` | Full scale Y-axis |
+
+### Chart Controls
+| Key | Action |
+|-----|--------|
+| `A` / `D` | Slide time window left/right |
+| `Q` / `E` | Expand boundaries outward |
+| `U` / `O` | Shrink boundaries inward |
+| `S` | Auto scale Y-axis |
+| `F` | Full scale Y-axis |
 | `C` | Toggle colorblind mode |
 | `R` | Reset chart view |
-| `Space` / `Esc` | Early exit dialog |
-| `Y` / `N` | Push/Save (in modals) |
+| `Ctrl+Z` | Undo zoom |
+
+### Session
+| Key | Action |
+|-----|--------|
+| `Space` / `Esc` | Early exit (submit prompt if all labeled) |
+| `Y` / `Space` | Push to Delta (in submit prompt) |
+| `N` / `Esc` | Save for later (in submit prompt) |
 | `?` | Show all shortcuts |
 
 ## Session Management
