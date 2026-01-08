@@ -555,10 +555,10 @@ export function TimeSeriesChart({ data, title, globalYMax }: TimeSeriesChartProp
             end: 100,
           });
         }
-      } else if (event.key === 'a' || event.key === 'A') {
+      } else if (event.key === 's' || event.key === 'S') {
         event.preventDefault();
         toggleAutoScale();
-      } else if (event.key === 's' || event.key === 'S') {
+      } else if (event.key === 'f' || event.key === 'F') {
         event.preventDefault();
         toggleFullScale();
       } else if (event.key === 'r' || event.key === 'R') {
@@ -570,6 +570,50 @@ export function TimeSeriesChart({ data, title, globalYMax }: TimeSeriesChartProp
       } else if (event.key === 'c' || event.key === 'C') {
         event.preventDefault();
         setColorblindMode((prev) => !prev);
+      } else if (event.code === 'KeyU' || event.code === 'KeyQ') {
+        // U: shrink left boundary (inward), Q: expand left boundary (outward)
+        event.preventDefault();
+        const chart = chartRef.current?.getEchartsInstance();
+        if (chart) {
+          const currentRange = xZoomRangeRef.current;
+          const step = 5; // 5% step
+          let newStart: number;
+          if (event.code === 'KeyQ') {
+            // Q: expand left (move start outward/left)
+            newStart = Math.max(0, currentRange.start - step);
+          } else {
+            // U: shrink left (move start inward/right)
+            newStart = Math.min(currentRange.end - step, currentRange.start + step);
+          }
+          chart.dispatchAction({
+            type: 'dataZoom',
+            dataZoomIndex: 0,
+            start: newStart,
+            end: currentRange.end,
+          });
+        }
+      } else if (event.code === 'KeyO' || event.code === 'KeyE') {
+        // O: shrink right boundary (inward), E: expand right boundary (outward)
+        event.preventDefault();
+        const chart = chartRef.current?.getEchartsInstance();
+        if (chart) {
+          const currentRange = xZoomRangeRef.current;
+          const step = 5; // 5% step
+          let newEnd: number;
+          if (event.code === 'KeyE') {
+            // E: expand right (move end outward/right)
+            newEnd = Math.min(100, currentRange.end + step);
+          } else {
+            // O: shrink right (move end inward/left)
+            newEnd = Math.max(currentRange.start + step, currentRange.end - step);
+          }
+          chart.dispatchAction({
+            type: 'dataZoom',
+            dataZoomIndex: 0,
+            start: currentRange.start,
+            end: newEnd,
+          });
+        }
       }
     };
 
@@ -620,11 +664,11 @@ export function TimeSeriesChart({ data, title, globalYMax }: TimeSeriesChartProp
         return;
       }
 
-      if ((event.key === 'q' || event.key === 'Q') && direction !== 'left') {
+      if ((event.key === 'a' || event.key === 'A') && direction !== 'left') {
         event.preventDefault();
         direction = 'left';
         if (!animationId) animationId = requestAnimationFrame(moveSlider);
-      } else if ((event.key === 'e' || event.key === 'E') && direction !== 'right') {
+      } else if ((event.key === 'd' || event.key === 'D') && direction !== 'right') {
         event.preventDefault();
         direction = 'right';
         if (!animationId) animationId = requestAnimationFrame(moveSlider);
@@ -632,13 +676,13 @@ export function TimeSeriesChart({ data, title, globalYMax }: TimeSeriesChartProp
     };
 
     const handleKeyUp = (event: KeyboardEvent) => {
-      if ((event.key === 'q' || event.key === 'Q') && direction === 'left') {
+      if ((event.key === 'a' || event.key === 'A') && direction === 'left') {
         direction = null;
         if (animationId) {
           cancelAnimationFrame(animationId);
           animationId = null;
         }
-      } else if ((event.key === 'e' || event.key === 'E') && direction === 'right') {
+      } else if ((event.key === 'd' || event.key === 'D') && direction === 'right') {
         direction = null;
         if (animationId) {
           cancelAnimationFrame(animationId);
@@ -674,6 +718,7 @@ export function TimeSeriesChart({ data, title, globalYMax }: TimeSeriesChartProp
   const hasSelection = xZoomRange.start > 0.5 || xZoomRange.end < 99.5;
 
   const option = {
+    animation: false,  // Disable animation for instant chart rendering on navigation
     title: {
       text: title || 'Time Series Data',
       left: 'center',
