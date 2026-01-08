@@ -719,7 +719,7 @@ export function SessionLaunchPage({
                   cursor: 'pointer',
                 }}
               >
-                Cancel
+                Cancel (Esc)
               </button>
               <button
                 onClick={() => handleDeleteSession(showDeleteConfirm)}
@@ -732,7 +732,7 @@ export function SessionLaunchPage({
                   cursor: 'pointer',
                 }}
               >
-                Delete
+                Delete (Y)
               </button>
             </div>
           </div>
