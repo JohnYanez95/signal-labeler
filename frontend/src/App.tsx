@@ -399,61 +399,60 @@ function App() {
   const hasNextInDevice = currentDeviceIndex < currentDeviceRuns.length - 1;
   const hasPreviousInDevice = currentDeviceIndex > 0;
 
-  const handleLabel = async (label: LabelType) => {
+  const handleLabel = (label: LabelType) => {
     if (!currentRun || !labelerName) return;
 
-    // Get previous label if user already labeled this run (for re-vote handling)
-    const previousLabel = userLabels.get(currentRun.run_id) ?? null;
+    const runId = currentRun.run_id;
+    const previousLabel = userLabels.get(runId) ?? null;
 
-    const success = await submitLabel(
-      currentRun.run_id,
-      modelType,
-      labelerName,
-      label,
-      previousLabel  // Pass previous label so cache update handles re-votes correctly
-    );
+    // Optimistic UI update FIRST (instant feedback)
+    const newUserLabels = new Map(userLabels);
+    newUserLabels.set(runId, label);
+    setUserLabels(newUserLabels);
+    showNotification(`Labeled as: ${['Class A', 'Class B', 'Invalid'][label]}`);
 
-    if (success) {
-      // Track this run and its label
-      const newUserLabels = new Map(userLabels);
-      newUserLabels.set(currentRun.run_id, label);
-      setUserLabels(newUserLabels);
-
-      showNotification(`Labeled as: ${['Class A', 'Class B', 'Invalid'][label]}`);
-
-      // Check if all runs in the ENTIRE session are now labeled
-      if (newUserLabels.size === runs.length) {
-        // All runs labeled - show completion modal with Save/Push options
-        setShowAllRunsLabeledModal(true);
-      } else if (hasNextInDevice) {
-        // Auto-advance to next run within current device
-        const nextIndex = currentDeviceIndex + 1;
-        const nextRun = currentDeviceRuns[nextIndex];
-        const globalIndex = runs.findIndex(r => r.run_id === nextRun.run_id);
-        if (globalIndex >= 0) {
-          // Pass run_id directly to avoid stale closure issues
-          await goToIndex(globalIndex, modelType, activeSessionId || undefined, nextRun.run_id);
+    // Fire API in background (don't await)
+    submitLabel(runId, modelType, labelerName, label, previousLabel)
+      .catch(() => {
+        // Rollback on failure
+        const rolledBack = new Map(userLabels);
+        if (previousLabel !== null) {
+          rolledBack.set(runId, previousLabel);
+        } else {
+          rolledBack.delete(runId);
         }
-      } else {
-        // End of current device - check if device is now complete
-        const currentDeviceProgress = deviceProgressList.find(d => d.deviceId === currentDeviceId);
-        if (currentDeviceProgress) {
-          const remaining = currentDeviceProgress.totalRuns - currentDeviceProgress.labeledCount - 1; // -1 for current just labeled
-          if (remaining <= 0) {
-            // Device complete - check if there are more available devices
-            const availableDevices = deviceProgressList.filter(
-              d => d.deviceId !== currentDeviceId && d.labeledCount < d.totalRuns
-            );
-            if (availableDevices.length > 0) {
-              // Show prompt to proceed to next device
-              setShowNextDevicePrompt(true);
-            } else {
-              // All devices complete
-              showNotification('All devices complete! Use Early Exit or Sessions when ready to push.');
-            }
+        setUserLabels(rolledBack);
+        showNotification('Label failed to save!');
+      });
+
+    // Auto-advance immediately (don't wait for API)
+    if (newUserLabels.size === runs.length) {
+      // All runs labeled - show completion modal
+      setShowAllRunsLabeledModal(true);
+    } else if (hasNextInDevice) {
+      // Auto-advance to next run within current device
+      const nextIndex = currentDeviceIndex + 1;
+      const nextRun = currentDeviceRuns[nextIndex];
+      const globalIndex = runs.findIndex(r => r.run_id === nextRun.run_id);
+      if (globalIndex >= 0) {
+        goToIndex(globalIndex, modelType, activeSessionId || undefined, nextRun.run_id);
+      }
+    } else {
+      // End of current device - check if device is now complete
+      const currentDeviceProgress = deviceProgressList.find(d => d.deviceId === currentDeviceId);
+      if (currentDeviceProgress) {
+        const remaining = currentDeviceProgress.totalRuns - currentDeviceProgress.labeledCount - 1;
+        if (remaining <= 0) {
+          const availableDevices = deviceProgressList.filter(
+            d => d.deviceId !== currentDeviceId && d.labeledCount < d.totalRuns
+          );
+          if (availableDevices.length > 0) {
+            setShowNextDevicePrompt(true);
           } else {
-            showNotification('End of device runs. Use Previous or select another device.');
+            showNotification('All devices complete! Use Early Exit or Sessions when ready to push.');
           }
+        } else {
+          showNotification('End of device runs. Use Previous or select another device.');
         }
       }
     }
@@ -485,7 +484,7 @@ function App() {
   }, [hasNextInDevice, currentDeviceRuns, currentDeviceIndex, runs, goToIndex, modelType, activeSessionId]);
 
   // Handle device selection from DeviceNavigator
-  const handleDeviceSelect = useCallback(async (deviceId: string) => {
+  const handleDeviceSelect = useCallback((deviceId: string) => {
     // Save current device progress before switching
     if (currentDeviceId && currentDeviceId !== deviceId) {
       saveCurrentSessionToCache();
@@ -502,14 +501,14 @@ function App() {
       const globalIndex = runs.findIndex(r => r.run_id === targetRun.run_id);
 
       if (globalIndex >= 0) {
-        // Pass run_id directly to avoid stale closure issues
-        await goToIndex(globalIndex, modelType, activeSessionId || undefined, targetRun.run_id);
+        // goToIndex checks cache synchronously - no await needed
+        goToIndex(globalIndex, modelType, activeSessionId || undefined, targetRun.run_id);
       }
     }
   }, [currentDeviceId, runs, userLabels, saveCurrentSessionToCache, goToIndex, modelType, activeSessionId]);
 
   // Proceed to next available device (from prompt)
-  const handleProceedToNextDevice = useCallback(async () => {
+  const handleProceedToNextDevice = useCallback(() => {
     setShowNextDevicePrompt(false);
 
     // Find the next available (incomplete) device
@@ -519,7 +518,7 @@ function App() {
 
     if (availableDevices.length > 0) {
       const nextDevice = availableDevices[0];
-      await handleDeviceSelect(nextDevice.deviceId);
+      handleDeviceSelect(nextDevice.deviceId);
     }
   }, [deviceProgressList, currentDeviceId, handleDeviceSelect]);
 
@@ -531,8 +530,13 @@ function App() {
   // Handle session selection from SessionLaunchPage
   const handleSessionSelect = useCallback(async (sessionId: string) => {
     try {
-      // Get session details first
-      const sessionInfo = await api.getSession(sessionId);
+      // Fetch all session data in parallel for faster load
+      const [sessionInfo, response, labelsRecord] = await Promise.all([
+        api.getSession(sessionId),
+        api.getSessionRuns(sessionId),
+        api.getSessionUserLabels(sessionId).catch(() => ({} as Record<string, number>)),
+      ]);
+
       setModelType(sessionInfo.model_type);
       setLabelerName(sessionInfo.labeler);
       setActiveSessionId(sessionId);
@@ -540,23 +544,13 @@ function App() {
       // Always close the session launcher and go to labeling interface
       setShowSessionLauncher(false);
 
-      // Load runs from the session
-      const response = await api.getSessionRuns(sessionId);
       if (response.runs && response.runs.length > 0) {
-        // Load user's previous labels for this session
-        try {
-          const labelsRecord = await api.getSessionUserLabels(sessionId);
-          // Convert Record<string, number> to Map<string, LabelType>
-          const labelsMap = new Map<string, LabelType>();
-          Object.entries(labelsRecord).forEach(([runId, label]) => {
-            labelsMap.set(runId, label as LabelType);
-          });
-          setUserLabels(labelsMap);
-        } catch (err) {
-          console.warn('Could not load user labels:', err);
-          // Continue without labels - user can re-label if needed
-          setUserLabels(new Map());
-        }
+        // Convert labels Record<string, number> to Map<string, LabelType>
+        const labelsMap = new Map<string, LabelType>();
+        Object.entries(labelsRecord).forEach(([runId, label]) => {
+          labelsMap.set(runId, label as LabelType);
+        });
+        setUserLabels(labelsMap);
 
         // Set current device to first device in runs
         const firstDeviceId = response.runs[0]?.device_id;
@@ -565,8 +559,8 @@ function App() {
         }
 
         // Use restoreSession to load runs directly from session cache
-        // This avoids re-querying rle_runs which doesn't have Delta-pulled data
-        await restoreSession(
+        // Don't await - show UI immediately, first run loads async
+        restoreSession(
           response.runs,
           0,
           response.global_y_max,
