@@ -38,11 +38,13 @@ function App() {
   const [_availableDevices, setAvailableDevices] = useState<string[]>([]);
   const [autoSelectDevice, setAutoSelectDevice] = useState<string | null>(null);
   const [userLabels, setUserLabels] = useState<Map<string, LabelType>>(new Map());
+  const labelHistoryRef = useRef<string[]>([]);  // Stack of labeled run IDs for Ctrl+Z navigation
   const [showLoadConfirm, setShowLoadConfirm] = useState(false);
   const [showEarlyExitConfirm, setShowEarlyExitConfirm] = useState(false);
   const [showHotkeyGuide, setShowHotkeyGuide] = useState(false);
   const [showPushOnExitConfirm, setShowPushOnExitConfirm] = useState(false);
   const [showNextDevicePrompt, setShowNextDevicePrompt] = useState(false);
+  const [showJumpToUnlabeledPrompt, setShowJumpToUnlabeledPrompt] = useState(false);
   const [showAllRunsLabeledModal, setShowAllRunsLabeledModal] = useState(false);
   const [isVerifyingLabels, setIsVerifyingLabels] = useState(false);
   const [verifiedLabelCount, setVerifiedLabelCount] = useState(0);
@@ -240,6 +242,7 @@ function App() {
 
     // Fresh sample - reset user labels tracking
     setUserLabels(new Map());
+    labelHistoryRef.current = [];
 
     // Always create a backend session via API (pulls from Delta Lake)
     if (!activeSessionId) {
@@ -425,24 +428,36 @@ function App() {
         showNotification('Label failed to save!');
       });
 
+    // Push current run to history for Ctrl+Z navigation (only if first time labeling)
+    if (previousLabel === null) {
+      labelHistoryRef.current.push(runId);
+    }
+
     // Auto-advance immediately (don't wait for API)
     if (newUserLabels.size === runs.length) {
       // All runs labeled - show completion modal
       setShowAllRunsLabeledModal(true);
-    } else if (hasNextInDevice) {
-      // Auto-advance to next run within current device
-      const nextIndex = currentDeviceIndex + 1;
-      const nextRun = currentDeviceRuns[nextIndex];
-      const globalIndex = runs.findIndex(r => r.run_id === nextRun.run_id);
-      if (globalIndex >= 0) {
-        goToIndex(globalIndex, modelType, activeSessionId || undefined, nextRun.run_id);
-      }
     } else {
-      // End of current device - check if device is now complete
-      const currentDeviceProgress = deviceProgressList.find(d => d.deviceId === currentDeviceId);
-      if (currentDeviceProgress) {
-        const remaining = currentDeviceProgress.totalRuns - currentDeviceProgress.labeledCount - 1;
-        if (remaining <= 0) {
+      // Find next unlabeled run AFTER current position
+      const nextUnlabeledAfter = currentDeviceRuns.slice(currentDeviceIndex + 1)
+        .find(r => !newUserLabels.has(r.run_id));
+
+      if (nextUnlabeledAfter) {
+        // Auto-advance to next unlabeled run
+        const globalIndex = runs.findIndex(r => r.run_id === nextUnlabeledAfter.run_id);
+        if (globalIndex >= 0) {
+          goToIndex(globalIndex, modelType, activeSessionId || undefined, nextUnlabeledAfter.run_id);
+        }
+      } else {
+        // No unlabeled runs after - check if there are unlabeled runs BEFORE
+        const hasUnlabeledBefore = currentDeviceRuns.slice(0, currentDeviceIndex)
+          .some(r => !newUserLabels.has(r.run_id));
+
+        if (hasUnlabeledBefore) {
+          // Prompt to jump to first unlabeled
+          setShowJumpToUnlabeledPrompt(true);
+        } else {
+          // Current device complete - check for other devices
           const availableDevices = deviceProgressList.filter(
             d => d.deviceId !== currentDeviceId && d.labeledCount < d.totalRuns
           );
@@ -451,8 +466,6 @@ function App() {
           } else {
             showNotification('All devices complete! Use Early Exit or Sessions when ready to push.');
           }
-        } else {
-          showNotification('End of device runs. Use Previous or select another device.');
         }
       }
     }
@@ -521,6 +534,38 @@ function App() {
       handleDeviceSelect(nextDevice.deviceId);
     }
   }, [deviceProgressList, currentDeviceId, handleDeviceSelect]);
+
+  // Jump to first unlabeled run in current device (from prompt)
+  const handleJumpToFirstUnlabeled = useCallback(() => {
+    setShowJumpToUnlabeledPrompt(false);
+
+    // Find first unlabeled run in current device
+    const firstUnlabeled = currentDeviceRuns.find(r => !userLabels.has(r.run_id));
+    if (firstUnlabeled) {
+      const globalIndex = runs.findIndex(r => r.run_id === firstUnlabeled.run_id);
+      if (globalIndex >= 0) {
+        goToIndex(globalIndex, modelType, activeSessionId || undefined, firstUnlabeled.run_id);
+      }
+    }
+  }, [currentDeviceRuns, userLabels, runs, goToIndex, modelType, activeSessionId]);
+
+  // Go back to previously labeled run (Ctrl+Z)
+  const handleGoBackInHistory = useCallback(() => {
+    if (labelHistoryRef.current.length === 0) return false;
+
+    // Pop the last labeled run from history
+    const previousRunId = labelHistoryRef.current.pop();
+    if (!previousRunId) return false;
+
+    // Find and navigate to that run
+    const globalIndex = runs.findIndex(r => r.run_id === previousRunId);
+    if (globalIndex >= 0) {
+      goToIndex(globalIndex, modelType, activeSessionId || undefined, previousRunId);
+      showNotification('Returned to previous run');
+      return true;
+    }
+    return false;
+  }, [runs, goToIndex, modelType, activeSessionId]);
 
   const showNotification = (message: string) => {
     setNotification(message);
@@ -593,19 +638,6 @@ function App() {
     }
   }, []);
 
-  // Check if there are unpushed labels and prompt to push before exiting
-  const handleEarlyExitConfirmed = useCallback(() => {
-    setShowEarlyExitConfirm(false);
-
-    // If there are labeled runs, offer to push to Delta
-    if (userLabels.size > 0 && activeSessionId) {
-      setShowPushOnExitConfirm(true);
-    } else {
-      // No labels to push, proceed directly to conclude
-      finalizeConclude();
-    }
-  }, [userLabels.size, activeSessionId]);
-
   // Finalize the session conclusion (called after push decision)
   const finalizeConclude = useCallback(() => {
     const labeledCount = userLabels.size;
@@ -621,6 +653,7 @@ function App() {
     setSessionActive(false);
     setCurrentDeviceId(null);
     setUserLabels(new Map());
+    labelHistoryRef.current = [];
     setAutoSelectDevice(null);
     setCompletedDevices([]);
     setDeviceSessions({});
@@ -785,6 +818,20 @@ function App() {
     showNotification(`Session saved! ${labeledCount} labels saved as draft. Resume anytime from Sessions.`);
   }, [clearSession, userLabels]);
 
+  // Early exit - if all runs labeled, offer submit prompt; otherwise save and exit
+  const handleEarlyExitConfirmed = useCallback(() => {
+    setShowEarlyExitConfirm(false);
+    // Check if all runs are labeled
+    const allLabeled = runs.length > 0 && runs.every(r => userLabels.has(r.run_id));
+    if (allLabeled) {
+      // Show submit prompt instead of just exiting
+      setShowAllRunsLabeledModal(true);
+    } else {
+      // Just save the session and exit - user wants out
+      handleSkipPushAndConclude();
+    }
+  }, [runs, userLabels, handleSkipPushAndConclude]);
+
   // Legacy handler for other modals that don't need push check
   const handleConcludeSession = useCallback(() => {
     // Close early exit first if open
@@ -899,6 +946,17 @@ function App() {
         return;
       }
 
+      // Ctrl+Z to go back to previously labeled run
+      if ((event.ctrlKey || event.metaKey) && event.key === 'z' && sessionActive && !showConcludeConfirm && !showEndOfSessionModal && !showLoadConfirm && !showEarlyExitConfirm && !showNextDevicePrompt && !showJumpToUnlabeledPrompt && !showAllRunsLabeledModal) {
+        // Only handle if we have history, otherwise let chart handle zoom undo
+        if (labelHistoryRef.current.length > 0) {
+          event.preventDefault();
+          event.stopPropagation();
+          handleGoBackInHistory();
+          return;
+        }
+      }
+
       // Escape to close hotkey guide
       if (event.key === 'Escape' && showHotkeyGuide) {
         event.preventDefault();
@@ -910,9 +968,15 @@ function App() {
       if (showHotkeyGuide) return;
 
       // Spacebar or Escape to show early exit confirmation (not if another modal is open)
-      if ((event.code === 'Space' || event.key === 'Escape') && sessionActive && !showConcludeConfirm && !showEndOfSessionModal && !showLoadConfirm && !showEarlyExitConfirm) {
+      if ((event.code === 'Space' || event.key === 'Escape') && sessionActive && !showConcludeConfirm && !showEndOfSessionModal && !showLoadConfirm && !showEarlyExitConfirm && !showAllRunsLabeledModal && !showNextDevicePrompt && !showJumpToUnlabeledPrompt && !showPushOnExitConfirm) {
         event.preventDefault();
-        setShowEarlyExitConfirm(true);
+        // If all runs are labeled, show submit prompt directly
+        const allLabeled = runs.length > 0 && runs.every(r => userLabels.has(r.run_id));
+        if (allLabeled) {
+          setShowAllRunsLabeledModal(true);
+        } else {
+          setShowEarlyExitConfirm(true);
+        }
         return;
       }
 
@@ -923,10 +987,19 @@ function App() {
         return;
       }
 
-      // N to go to last run (end)
-      if ((event.key === 'n' || event.key === 'N') && sessionActive && !showConcludeConfirm && !showEndOfSessionModal && !showLoadConfirm && !showEarlyExitConfirm && !showNextDevicePrompt && !showAllRunsLabeledModal) {
+      // N to go to last unlabeled run
+      if ((event.key === 'n' || event.key === 'N') && sessionActive && !showConcludeConfirm && !showEndOfSessionModal && !showLoadConfirm && !showEarlyExitConfirm && !showNextDevicePrompt && !showJumpToUnlabeledPrompt && !showAllRunsLabeledModal) {
         event.preventDefault();
-        handleGoToIndex(runs.length - 1);
+        // Find last unlabeled run in current device
+        const lastUnlabeled = [...currentDeviceRuns].reverse().find(r => !userLabels.has(r.run_id));
+        if (lastUnlabeled) {
+          const globalIndex = runs.findIndex(r => r.run_id === lastUnlabeled.run_id);
+          if (globalIndex >= 0) {
+            goToIndex(globalIndex, modelType, activeSessionId || undefined, lastUnlabeled.run_id);
+          }
+        } else {
+          showNotification('All runs in this device are labeled');
+        }
         return;
       }
 
@@ -938,16 +1011,19 @@ function App() {
         } else if (event.key === 'n' || event.key === 'N' || event.key === 'Escape') {
           setShowConcludeConfirm(false);
         }
+        return;
       }
 
       // Y/N/Enter/Esc when early exit confirmation is shown
+      // Esc confirms exit (user pressed Esc to get here, pressing again confirms)
       if (showEarlyExitConfirm) {
         event.preventDefault();
-        if (event.key === 'y' || event.key === 'Y' || event.key === 'Enter') {
+        if (event.key === 'y' || event.key === 'Y' || event.key === 'Enter' || event.key === 'Escape') {
           handleEarlyExitConfirmed();
-        } else if (event.key === 'n' || event.key === 'N' || event.key === 'Escape') {
+        } else if (event.key === 'n' || event.key === 'N') {
           setShowEarlyExitConfirm(false);
         }
+        return;
       }
 
       // Y/N/Enter/Esc when save session confirmation is shown
@@ -959,6 +1035,7 @@ function App() {
         } else if (event.key === 'n' || event.key === 'N' || event.key === 'Escape') {
           handlePushAndConclude();  // Push to Delta
         }
+        return;
       }
 
       // Y/N/Enter/Esc when load new runs confirmation is shown
@@ -969,6 +1046,7 @@ function App() {
         } else if (event.key === 'n' || event.key === 'N' || event.key === 'Escape') {
           handleCancelLoadRuns();
         }
+        return;
       }
 
       // Y/N when end-of-session modal is shown
@@ -980,6 +1058,7 @@ function App() {
         } else if (event.key === 'n' || event.key === 'N' || event.key === 'Escape') {
           handleSkipPushAndConclude();
         }
+        return;
       }
 
       // Y/N when next device prompt is shown
@@ -991,30 +1070,44 @@ function App() {
         } else if (event.key === 'n' || event.key === 'N' || event.key === 'Escape') {
           setShowNextDevicePrompt(false);
         }
+        return;
       }
 
-      // Y/N when all runs labeled modal is shown (ignore if verifying)
-      // Y = Push to Delta (with verification), N = Save draft
-      if (showAllRunsLabeledModal && !isVerifyingLabels) {
+      // Y/N when jump to unlabeled prompt is shown
+      // Y = Jump to first unlabeled, N = Stay here
+      if (showJumpToUnlabeledPrompt) {
         event.preventDefault();
         if (event.key === 'y' || event.key === 'Y' || event.key === 'Enter') {
+          handleJumpToFirstUnlabeled();
+        } else if (event.key === 'n' || event.key === 'N' || event.key === 'Escape') {
+          setShowJumpToUnlabeledPrompt(false);
+        }
+        return;
+      }
+
+      // Y/Space/N/Esc when all runs labeled modal is shown (ignore if verifying)
+      // Y/Space = Push to Delta (with verification), N/Esc = Save draft
+      if (showAllRunsLabeledModal && !isVerifyingLabels) {
+        event.preventDefault();
+        if (event.key === 'y' || event.key === 'Y' || event.key === 'Enter' || event.code === 'Space') {
           handleVerifyAndPush();
         } else if (event.key === 'n' || event.key === 'N' || event.key === 'Escape') {
           setShowAllRunsLabeledModal(false);
           handleSkipPushAndConclude();
         }
+        return;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [sessionActive, showConcludeConfirm, showEndOfSessionModal, showLoadConfirm, showEarlyExitConfirm, showHotkeyGuide, showClusterConfirm, showPushOnExitConfirm, showNextDevicePrompt, showAllRunsLabeledModal, isVerifyingLabels, isPushing, handleConcludeSession, handleGoToFirstUnlabeled, handleGoToIndex, handleConfirmLoadRuns, handleCancelLoadRuns, handleStartCluster, handleEarlyExitConfirmed, handlePushAndConclude, handleSkipPushAndConclude, handleProceedToNextDevice, handleVerifyAndPush, runs.length]);
+  }, [sessionActive, showConcludeConfirm, showEndOfSessionModal, showLoadConfirm, showEarlyExitConfirm, showHotkeyGuide, showClusterConfirm, showPushOnExitConfirm, showNextDevicePrompt, showJumpToUnlabeledPrompt, showAllRunsLabeledModal, isVerifyingLabels, isPushing, handleConcludeSession, handleGoToFirstUnlabeled, handleGoToIndex, handleConfirmLoadRuns, handleCancelLoadRuns, handleStartCluster, handleEarlyExitConfirmed, handlePushAndConclude, handleSkipPushAndConclude, handleProceedToNextDevice, handleJumpToFirstUnlabeled, handleGoBackInHistory, handleVerifyAndPush, runs.length]);
 
   useKeyboardNav({
     onPrevious: handlePrevious,
     onNext: handleNext,
     onLabel: handleLabel,
-    enabled: sessionActive && !!currentRun && !loading && !showConcludeConfirm && !showEndOfSessionModal && !showLoadConfirm && !showEarlyExitConfirm && !showHotkeyGuide && !showNextDevicePrompt && !showAllRunsLabeledModal,
+    enabled: sessionActive && !!currentRun && !loading && !showConcludeConfirm && !showEndOfSessionModal && !showLoadConfirm && !showEarlyExitConfirm && !showHotkeyGuide && !showNextDevicePrompt && !showJumpToUnlabeledPrompt && !showAllRunsLabeledModal,
   });
 
   return (
@@ -1325,6 +1418,80 @@ function App() {
         </div>
       )}
 
+      {/* Jump to Unlabeled Prompt Modal */}
+      {showJumpToUnlabeledPrompt && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#1f2937',
+              padding: '24px',
+              borderRadius: '12px',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
+              maxWidth: '400px',
+              textAlign: 'center',
+            }}
+          >
+            <h3 style={{ margin: '0 0 16px 0', color: '#f59e0b', fontSize: '20px' }}>
+              End of Runs
+            </h3>
+            <p style={{ color: '#9ca3af', margin: '0 0 20px 0' }}>
+              You've reached the end, but there are still{' '}
+              <strong style={{ color: 'white' }}>
+                {currentDeviceRuns.filter(r => !userLabels.has(r.run_id)).length}
+              </strong>{' '}
+              unlabeled runs for this device.
+            </p>
+            <p style={{ color: '#6b7280', margin: '0 0 20px 0', fontSize: '13px' }}>
+              Press <strong style={{ color: '#9ca3af' }}>Y</strong> to jump to first unlabeled, <strong style={{ color: '#9ca3af' }}>N</strong> to stay here
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button
+                onClick={() => setShowJumpToUnlabeledPrompt(false)}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#374151',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                }}
+              >
+                Stay Here (N)
+              </button>
+              <button
+                onClick={handleJumpToFirstUnlabeled}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#f59e0b',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                }}
+              >
+                Jump to Unlabeled (Y) →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* All Runs Labeled Modal - shown when user finishes all runs */}
       {showAllRunsLabeledModal && (
         <div
@@ -1421,7 +1588,7 @@ function App() {
                   </button>
                 </div>
                 <p style={{ color: '#6b7280', margin: '16px 0 0 0', fontSize: '12px' }}>
-                  Press <strong style={{ color: '#9ca3af' }}>N</strong> to Save, <strong style={{ color: '#9ca3af' }}>Y</strong> to Push
+                  Press <strong style={{ color: '#9ca3af' }}>Y</strong> or <strong style={{ color: '#9ca3af' }}>Space</strong> to Push, <strong style={{ color: '#9ca3af' }}>N</strong> or <strong style={{ color: '#9ca3af' }}>Esc</strong> to Save
                 </p>
               </>
             )}
@@ -1438,10 +1605,11 @@ function App() {
             <div style={styles.hotkeySection}>
               <h3 style={styles.hotkeySectionTitle}>Navigation</h3>
               <div style={styles.hotkeyGrid}>
-                <span style={styles.hotkeyKey}>← / T</span><span style={styles.hotkeyDesc}>Previous run</span>
-                <span style={styles.hotkeyKey}>→ / G</span><span style={styles.hotkeyDesc}>Next run</span>
+                <span style={styles.hotkeyKey}>← / J</span><span style={styles.hotkeyDesc}>Previous run</span>
+                <span style={styles.hotkeyKey}>→ / L</span><span style={styles.hotkeyDesc}>Next run</span>
                 <span style={styles.hotkeyKey}>H</span><span style={styles.hotkeyDesc}>Jump to first unlabeled</span>
-                <span style={styles.hotkeyKey}>N</span><span style={styles.hotkeyDesc}>Jump to last run</span>
+                <span style={styles.hotkeyKey}>N</span><span style={styles.hotkeyDesc}>Jump to last unlabeled run</span>
+                <span style={styles.hotkeyKey}>Ctrl+Z</span><span style={styles.hotkeyDesc}>Go back to previous labeled run</span>
               </div>
             </div>
 
@@ -1457,12 +1625,15 @@ function App() {
             <div style={styles.hotkeySection}>
               <h3 style={styles.hotkeySectionTitle}>Chart Controls</h3>
               <div style={styles.hotkeyGrid}>
-                <span style={styles.hotkeyKey}>Q / E</span><span style={styles.hotkeyDesc}>Move slider window left/right</span>
-                <span style={styles.hotkeyKey}>A</span><span style={styles.hotkeyDesc}>Toggle Auto Scale (visible data)</span>
-                <span style={styles.hotkeyKey}>S</span><span style={styles.hotkeyDesc}>Toggle Full Scale (entire series)</span>
+                <span style={styles.hotkeyKey}>A / D</span><span style={styles.hotkeyDesc}>Move slider window left/right</span>
+                <span style={styles.hotkeyKey}>U</span><span style={styles.hotkeyDesc}>Shrink left boundary (inward)</span>
+                <span style={styles.hotkeyKey}>O</span><span style={styles.hotkeyDesc}>Shrink right boundary (inward)</span>
+                <span style={styles.hotkeyKey}>Q</span><span style={styles.hotkeyDesc}>Expand left boundary (outward)</span>
+                <span style={styles.hotkeyKey}>E</span><span style={styles.hotkeyDesc}>Expand right boundary (outward)</span>
+                <span style={styles.hotkeyKey}>S</span><span style={styles.hotkeyDesc}>Toggle Auto Scale (visible data)</span>
+                <span style={styles.hotkeyKey}>F</span><span style={styles.hotkeyDesc}>Toggle Full Scale (entire series)</span>
                 <span style={styles.hotkeyKey}>C</span><span style={styles.hotkeyDesc}>Toggle Colorblind Mode</span>
                 <span style={styles.hotkeyKey}>R</span><span style={styles.hotkeyDesc}>Reset chart view</span>
-                <span style={styles.hotkeyKey}>Ctrl+Z</span><span style={styles.hotkeyDesc}>Undo zoom</span>
               </div>
             </div>
 
