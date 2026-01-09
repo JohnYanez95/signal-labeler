@@ -206,3 +206,24 @@ Edit `.env` to configure:
 - `DATA_BACKEND`: `sqlite` or `databricks` (future)
 - `MODEL_TYPE_DEFAULT`: Default model type
 - `CORS_ORIGINS`: Allowed frontend origins
+
+## Troubleshooting
+
+### `Mkdirs failed to create file:/.../data/delta/devices`
+
+If you see this error when running `python sync.py seed`:
+
+```
+java.io.IOException: Mkdirs failed to create file:/home/.../backend/data/delta/devices
+```
+
+This happens when the `data/` directory was previously created by Docker (as root) and your local user doesn't have write permissions.
+
+**Fix:**
+```bash
+sudo rm -rf data/
+# Or to preserve existing data:
+sudo chown -R $USER:$USER data/
+```
+
+Then run `python sync.py seed` again.
