@@ -197,7 +197,7 @@ sequenceDiagram
 ### Navigation & Labeling
 | Key | Action |
 |-----|--------|
-| `←` / `→` or `J` / `L` | Navigate runs |
+| `←` / `→` or `Shift` / `Space` | Navigate runs |
 | `H` | Jump to first unlabeled run |
 | `N` | Jump to last unlabeled run |
 | `Ctrl+Z` | Go back to previous labeled run |
@@ -207,20 +207,19 @@ sequenceDiagram
 ### Chart Controls
 | Key | Action |
 |-----|--------|
-| `A` / `D` | Slide time window left/right |
-| `Q` / `E` | Expand boundaries outward |
+| `Q` / `E` | Slide time window left/right |
+| `J` / `L` | Expand boundaries outward |
 | `U` / `O` | Shrink boundaries inward |
-| `S` | Auto scale Y-axis |
-| `F` | Full scale Y-axis |
+| `A` | Auto scale Y-axis |
+| `S` | Full scale Y-axis |
 | `C` | Toggle colorblind mode |
 | `R` | Reset chart view |
-| `Ctrl+Z` | Undo zoom |
 
 ### Session
 | Key | Action |
 |-----|--------|
-| `Space` / `Esc` | Early exit (submit prompt if all labeled) |
-| `Y` / `Space` | Push to Delta (in submit prompt) |
+| `Esc` | Early exit (submit prompt if all labeled) |
+| `Y` | Push to Delta (in submit prompt) |
 | `N` / `Esc` | Save for later (in submit prompt) |
 | `?` | Show all shortcuts |
 
@@ -419,6 +418,7 @@ delta-spark==3.2.0
 2. **Spark memory errors** - Increase `SPARK_DRIVER_MEMORY`
 3. **Delta table not found** - Run initial data seeding
 4. **WSL2 network issues** - Enable `networkingMode=mirrored`
+5. **Switching from Docker to local dev** - Docker creates `backend/data` with root ownership. Remove it first: `sudo rm -r backend/data`, then re-seed.
 
 ## License
 
