@@ -69,6 +69,7 @@ export function TimeSeriesChart({ data, title, globalYMax }: TimeSeriesChartProp
   const [autoScaled, setAutoScaled] = useState(false);  // Default uses globalYMax bounds
   const [fullScaleActive, setFullScaleActive] = useState(false);
   const [xZoomRange, setXZoomRange] = useState<{ start: number; end: number }>({ start: 0, end: 100 });
+  const [stableZoomRange, setStableZoomRange] = useState<{ start: number; end: number }>({ start: 0, end: 100 });  // Debounced zoom range for Y-axis calc
   const [lockedYBounds, setLockedYBounds] = useState<{ min: number; max: number } | null>(null);
   const [isSliderDrag, setIsSliderDrag] = useState(false);  // Track slider brush drag for red boundary
   const [brushBounds, setBrushBounds] = useState<{ start: number; end: number } | null>(null);  // Brush area being drawn (percentage)
@@ -80,6 +81,15 @@ export function TimeSeriesChart({ data, title, globalYMax }: TimeSeriesChartProp
   // Keep ref to current colors for use in event handlers (avoids stale closure)
   const colorsRef = useRef(colors);
   colorsRef.current = colors;
+
+  // Debounce stableZoomRange update - only recalculate Y bounds after movement stops
+  // This prevents expensive Y-axis recalculations during rapid slider movement
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setStableZoomRange(xZoomRange);
+    }, 150); // 150ms after movement stops
+    return () => clearTimeout(timer);
+  }, [xZoomRange]);
 
   // Calculate full time-series bounds (current run's full data)
   // Filter out NaN/null/undefined values, handle negative values
@@ -111,14 +121,15 @@ export function TimeSeriesChart({ data, title, globalYMax }: TimeSeriesChartProp
     return { defaultYMin: fullYMin, defaultYMax: fullYMax };
   }, [globalYMax, fullYMin, fullYMax]);
 
-  // Calculate auto-scale bounds based on visible data (current zoom range)
+  // Calculate auto-scale bounds based on visible data (stable zoom range)
+  // Uses stableZoomRange (debounced) to avoid recalculation during rapid movement
   // Filter out NaN/null/undefined values, handle negative values
   const { yMin, yMax } = useMemo(() => {
     if (data.length === 0) return { yMin: 0, yMax: 100 };
 
-    // Filter data to visible range
-    const startIdx = Math.floor((xZoomRange.start / 100) * data.length);
-    const endIdx = Math.ceil((xZoomRange.end / 100) * data.length);
+    // Filter data to visible range (using stable/debounced range)
+    const startIdx = Math.floor((stableZoomRange.start / 100) * data.length);
+    const endIdx = Math.ceil((stableZoomRange.end / 100) * data.length);
     const visibleData = data.slice(startIdx, endIdx);
 
     if (visibleData.length === 0) return { yMin: 0, yMax: 100 };
@@ -137,7 +148,12 @@ export function TimeSeriesChart({ data, title, globalYMax }: TimeSeriesChartProp
       yMin: Math.round((minVal - 1) * 100) / 100,
       yMax: Math.round((maxVal + 1) * 100) / 100,
     };
-  }, [data, xZoomRange]);
+  }, [data, stableZoomRange]);
+
+  // Memoize chart data transformation to avoid creating new array on every render
+  const chartData = useMemo(() => {
+    return data.map((point) => [point.ts * 1000, point.value]);
+  }, [data]);
 
   // Determine actual Y bounds to use:
   // - Auto Scale (A): uses visible data range (yMin/yMax)
@@ -212,18 +228,36 @@ export function TimeSeriesChart({ data, title, globalYMax }: TimeSeriesChartProp
   const dragBoundsRef = useRef<{ xStart: number; xEnd: number } | null>(null);
   const [dragOverlay, setDragOverlay] = useState<{ mode: 'horizontal'; xStart: number; xEnd: number } | null>(null);
 
-  // Direct state setter for slider range - no throttling for maximum responsiveness
+  // Throttled state setter for slider range - reduces re-renders during rapid movement
+  // Uses ref to track last update time, only updates state every 16ms (~60fps) during movement
+  const lastRangeUpdateRef = useRef<number>(0);
+  const pendingRangeRef = useRef<{ start: number; end: number } | null>(null);
+
   const setSliderRange = useCallback((start: number, end: number) => {
-    setXZoomRange((prev) => {
-      if (prev.start !== start || prev.end !== end) {
-        return { start, end };
-      }
-      return prev;
-    });
+    const now = Date.now();
+    const timeSinceLastUpdate = now - lastRangeUpdateRef.current;
+
+    // Store pending range
+    pendingRangeRef.current = { start, end };
+
+    // Throttle: only update state every 16ms (60fps) to reduce re-renders
+    if (timeSinceLastUpdate >= 16) {
+      lastRangeUpdateRef.current = now;
+      setXZoomRange((prev) => {
+        const pending = pendingRangeRef.current;
+        if (pending && (prev.start !== pending.start || prev.end !== pending.end)) {
+          return pending;
+        }
+        return prev;
+      });
+    }
   }, []);
 
   // Track brush selection start position for real-time preview
   const brushStartRef = useRef<number | null>(null);
+
+  // Track if Q/E sliding is active (to prevent J/L expand during slide)
+  const isSlidingRef = useRef<boolean>(false);
 
   // Keep a ref to current zoom range for use in event handlers
   const xZoomRangeRef = useRef(xZoomRange);
@@ -544,21 +578,10 @@ export function TimeSeriesChart({ data, title, globalYMax }: TimeSeriesChartProp
         return;
       }
 
-      if ((event.ctrlKey || event.metaKey) && event.key === 'z') {
-        const chart = chartRef.current?.getEchartsInstance();
-        if (chart) {
-          event.preventDefault();
-          chart.dispatchAction({
-            type: 'dataZoom',
-            dataZoomIndex: 0,
-            start: 0,
-            end: 100,
-          });
-        }
-      } else if (event.key === 's' || event.key === 'S') {
+      if (event.key === 'a' || event.key === 'A') {
         event.preventDefault();
         toggleAutoScale();
-      } else if (event.key === 'f' || event.key === 'F') {
+      } else if (event.key === 's' || event.key === 'S') {
         event.preventDefault();
         toggleFullScale();
       } else if (event.key === 'r' || event.key === 'R') {
@@ -570,16 +593,18 @@ export function TimeSeriesChart({ data, title, globalYMax }: TimeSeriesChartProp
       } else if (event.key === 'c' || event.key === 'C') {
         event.preventDefault();
         setColorblindMode((prev) => !prev);
-      } else if (event.code === 'KeyU' || event.code === 'KeyQ') {
-        // U: shrink left boundary (inward), Q: expand left boundary (outward)
+      } else if (event.code === 'KeyU' || event.code === 'KeyJ') {
+        // U: shrink left boundary (inward), J: expand left boundary (outward)
+        // Skip if Q/E sliding is active to prevent conflicts
+        if (isSlidingRef.current) return;
         event.preventDefault();
         const chart = chartRef.current?.getEchartsInstance();
         if (chart) {
           const currentRange = xZoomRangeRef.current;
           const step = 5; // 5% step
           let newStart: number;
-          if (event.code === 'KeyQ') {
-            // Q: expand left (move start outward/left)
+          if (event.code === 'KeyJ') {
+            // J: expand left (move start outward/left)
             newStart = Math.max(0, currentRange.start - step);
           } else {
             // U: shrink left (move start inward/right)
@@ -592,16 +617,18 @@ export function TimeSeriesChart({ data, title, globalYMax }: TimeSeriesChartProp
             end: currentRange.end,
           });
         }
-      } else if (event.code === 'KeyO' || event.code === 'KeyE') {
-        // O: shrink right boundary (inward), E: expand right boundary (outward)
+      } else if (event.code === 'KeyO' || event.code === 'KeyL') {
+        // O: shrink right boundary (inward), L: expand right boundary (outward)
+        // Skip if Q/E sliding is active to prevent conflicts
+        if (isSlidingRef.current) return;
         event.preventDefault();
         const chart = chartRef.current?.getEchartsInstance();
         if (chart) {
           const currentRange = xZoomRangeRef.current;
           const step = 5; // 5% step
           let newEnd: number;
-          if (event.code === 'KeyE') {
-            // E: expand right (move end outward/right)
+          if (event.code === 'KeyL') {
+            // L: expand right (move end outward/right)
             newEnd = Math.min(100, currentRange.end + step);
           } else {
             // O: shrink right (move end inward/left)
@@ -664,26 +691,30 @@ export function TimeSeriesChart({ data, title, globalYMax }: TimeSeriesChartProp
         return;
       }
 
-      if ((event.key === 'a' || event.key === 'A') && direction !== 'left') {
+      if ((event.key === 'q' || event.key === 'Q') && direction !== 'left') {
         event.preventDefault();
         direction = 'left';
+        isSlidingRef.current = true;
         if (!animationId) animationId = requestAnimationFrame(moveSlider);
-      } else if ((event.key === 'd' || event.key === 'D') && direction !== 'right') {
+      } else if ((event.key === 'e' || event.key === 'E') && direction !== 'right') {
         event.preventDefault();
         direction = 'right';
+        isSlidingRef.current = true;
         if (!animationId) animationId = requestAnimationFrame(moveSlider);
       }
     };
 
     const handleKeyUp = (event: KeyboardEvent) => {
-      if ((event.key === 'a' || event.key === 'A') && direction === 'left') {
+      if ((event.key === 'q' || event.key === 'Q') && direction === 'left') {
         direction = null;
+        isSlidingRef.current = false;
         if (animationId) {
           cancelAnimationFrame(animationId);
           animationId = null;
         }
-      } else if ((event.key === 'd' || event.key === 'D') && direction === 'right') {
+      } else if ((event.key === 'e' || event.key === 'E') && direction === 'right') {
         direction = null;
+        isSlidingRef.current = false;
         if (animationId) {
           cancelAnimationFrame(animationId);
           animationId = null;
@@ -748,9 +779,14 @@ export function TimeSeriesChart({ data, title, globalYMax }: TimeSeriesChartProp
     series: [
       {
         type: 'line',
-        data: data.map((point) => [point.ts * 1000, point.value]),
+        data: chartData,
         smooth: false,
         symbol: 'none',
+        // Large dataset optimizations (kicks in at >2800 points)
+        sampling: 'lttb',        // Largest-Triangle-Three-Buckets downsampling for display
+        large: true,             // Use canvas optimization for large datasets
+        largeThreshold: 2800,    // Enable large mode when > 2800 points
+        progressive: 400,        // Render in chunks of 400 points
         lineStyle: {
           width: 2,
         },
@@ -960,18 +996,7 @@ export function TimeSeriesChart({ data, title, globalYMax }: TimeSeriesChartProp
         option={option}
         style={{ height: '100%', width: '100%' }}
         onChartReady={onChartReady}
-        onEvents={{
-          dataZoom: (params: any) => {
-            if (params.start !== undefined && params.end !== undefined) {
-              setXZoomRange({ start: params.start, end: params.end });
-            } else if (params.batch) {
-              const xZoom = params.batch.find((b: any) => b.dataZoomId === 'sliderZoom');
-              if (xZoom && xZoom.start !== undefined && xZoom.end !== undefined) {
-                setXZoomRange({ start: xZoom.start, end: xZoom.end });
-              }
-            }
-          },
-        }}
+        // dataZoom events handled in onChartReady to avoid duplicate handlers
       />
       {/* Red brush box overlay on slider - aligned with data area */}
       {brushBounds && (
