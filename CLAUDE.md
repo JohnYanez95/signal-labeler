@@ -156,7 +156,7 @@ frontend/src/
 ## Keyboard Shortcuts
 
 ### Navigation & Labeling
-- `←` / `→` or `J` / `L` - Navigate runs
+- `←` / `→` or `Shift` / `Space` - Navigate runs
 - `H` - Jump to first unlabeled run
 - `N` - Jump to last unlabeled run
 - `Ctrl+Z` - Go back to previous labeled run
@@ -164,20 +164,19 @@ frontend/src/
 - `Ctrl+Enter` - Load runs (when devices found in filter)
 
 ### Chart Controls
-- `A` / `D` - Slide time window left/right
+- `Q` / `E` - Slide time window left/right
 - `U` - Shrink left boundary (inward)
 - `O` - Shrink right boundary (inward)
-- `Q` - Expand left boundary (outward)
-- `E` - Expand right boundary (outward)
-- `S` - Auto Scale (Y-axis follows visible data)
-- `F` - Full Scale (Y-axis covers entire series)
+- `J` - Expand left boundary (outward)
+- `L` - Expand right boundary (outward)
+- `A` - Auto Scale (Y-axis follows visible data)
+- `S` - Full Scale (Y-axis covers entire series)
 - `C` - Colorblind mode (amber/blue palette)
 - `R` - Reset view
-- `Ctrl+Z` - Undo zoom
 
 ### Session
-- `Space` / `Esc` - Early exit (shows submit prompt if all runs labeled)
-- `Y` / `Space` - Push to Delta (in submit prompt)
+- `Esc` - Early exit (shows submit prompt if all runs labeled)
+- `Y` - Push to Delta (in submit prompt)
 - `N` / `Esc` - Save for later (in submit prompt)
 - `?` - Hotkey guide
 
@@ -230,3 +229,14 @@ SPARK_DRIVER_MEMORY=4g
 - **WSL2**: Enable `networkingMode=mirrored` in `.wslconfig` for localhost access
 - **API URLs**: Frontend uses relative paths (`/api/...`) - works in both modes
 - **UTC**: All timestamps stored and displayed in UTC (pill shows local offset)
+
+## Troubleshooting
+
+### Switching from Docker to Local Development
+If you initialized the app with Docker and want to switch to local development, you need to remove the `backend/data` folder first. Docker creates this folder with root ownership, which causes permission issues when running locally.
+
+```bash
+sudo rm -r backend/data
+```
+
+Then re-seed the data using the local development method.

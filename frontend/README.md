@@ -136,7 +136,7 @@ VITE_API_BASE_URL=http://localhost:8000
 ## Keyboard Shortcuts
 
 ### Navigation
-- **←/→** or **J/L**: Navigate runs
+- **←/→** or **Shift/Space**: Navigate runs
 - **H**: Jump to first unlabeled run
 - **N**: Jump to last unlabeled run
 - **Ctrl+Z**: Go back to previous labeled run
@@ -147,15 +147,14 @@ VITE_API_BASE_URL=http://localhost:8000
 - **3**: Invalid label
 
 ### Chart Controls
-- **A/D**: Slide time window
-- **Q/E**: Expand boundaries
+- **Q/E**: Slide time window
+- **J/L**: Expand boundaries
 - **U/O**: Shrink boundaries
-- **S**: Auto scale Y-axis
-- **F**: Full scale Y-axis
+- **A**: Auto scale Y-axis
+- **S**: Full scale Y-axis
 - **C**: Colorblind mode
 - **R**: Reset view
-- **Ctrl+Z**: Undo zoom
 
 ### Session
-- **Space/Esc**: Early exit
+- **Esc**: Early exit
 - **?**: Show all shortcuts
