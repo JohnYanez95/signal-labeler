@@ -967,8 +967,8 @@ function App() {
       // Don't process other keys if hotkey guide is open
       if (showHotkeyGuide) return;
 
-      // Spacebar or Escape to show early exit confirmation (not if another modal is open)
-      if ((event.code === 'Space' || event.key === 'Escape') && sessionActive && !showConcludeConfirm && !showEndOfSessionModal && !showLoadConfirm && !showEarlyExitConfirm && !showAllRunsLabeledModal && !showNextDevicePrompt && !showJumpToUnlabeledPrompt && !showPushOnExitConfirm) {
+      // Escape to show early exit confirmation (not if another modal is open)
+      if (event.key === 'Escape' && sessionActive && !showConcludeConfirm && !showEndOfSessionModal && !showLoadConfirm && !showEarlyExitConfirm && !showAllRunsLabeledModal && !showNextDevicePrompt && !showJumpToUnlabeledPrompt && !showPushOnExitConfirm) {
         event.preventDefault();
         // If all runs are labeled, show submit prompt directly
         const allLabeled = runs.length > 0 && runs.every(r => userLabels.has(r.run_id));
@@ -1085,11 +1085,11 @@ function App() {
         return;
       }
 
-      // Y/Space/N/Esc when all runs labeled modal is shown (ignore if verifying)
-      // Y/Space = Push to Delta (with verification), N/Esc = Save draft
+      // Y/N/Esc when all runs labeled modal is shown (ignore if verifying)
+      // Y = Push to Delta (with verification), N/Esc = Save draft
       if (showAllRunsLabeledModal && !isVerifyingLabels) {
         event.preventDefault();
-        if (event.key === 'y' || event.key === 'Y' || event.key === 'Enter' || event.code === 'Space') {
+        if (event.key === 'y' || event.key === 'Y' || event.key === 'Enter') {
           handleVerifyAndPush();
         } else if (event.key === 'n' || event.key === 'N' || event.key === 'Escape') {
           setShowAllRunsLabeledModal(false);
@@ -1120,7 +1120,7 @@ function App() {
             style={styles.earlyExitButton}
           >
             Early Exit<br />
-            <span style={styles.earlyExitHotkey}>(Esc / Space)</span>
+            <span style={styles.earlyExitHotkey}>(Esc)</span>
           </button>
         )}
 
@@ -1588,7 +1588,7 @@ function App() {
                   </button>
                 </div>
                 <p style={{ color: '#6b7280', margin: '16px 0 0 0', fontSize: '12px' }}>
-                  Press <strong style={{ color: '#9ca3af' }}>Y</strong> or <strong style={{ color: '#9ca3af' }}>Space</strong> to Push, <strong style={{ color: '#9ca3af' }}>N</strong> or <strong style={{ color: '#9ca3af' }}>Esc</strong> to Save
+                  Press <strong style={{ color: '#9ca3af' }}>Y</strong> to Push, <strong style={{ color: '#9ca3af' }}>N</strong> or <strong style={{ color: '#9ca3af' }}>Esc</strong> to Save
                 </p>
               </>
             )}
@@ -1605,8 +1605,8 @@ function App() {
             <div style={styles.hotkeySection}>
               <h3 style={styles.hotkeySectionTitle}>Navigation</h3>
               <div style={styles.hotkeyGrid}>
-                <span style={styles.hotkeyKey}>← / J</span><span style={styles.hotkeyDesc}>Previous run</span>
-                <span style={styles.hotkeyKey}>→ / L</span><span style={styles.hotkeyDesc}>Next run</span>
+                <span style={styles.hotkeyKey}>← / Shift</span><span style={styles.hotkeyDesc}>Previous run</span>
+                <span style={styles.hotkeyKey}>→ / Space</span><span style={styles.hotkeyDesc}>Next run</span>
                 <span style={styles.hotkeyKey}>H</span><span style={styles.hotkeyDesc}>Jump to first unlabeled</span>
                 <span style={styles.hotkeyKey}>N</span><span style={styles.hotkeyDesc}>Jump to last unlabeled run</span>
                 <span style={styles.hotkeyKey}>Ctrl+Z</span><span style={styles.hotkeyDesc}>Go back to previous labeled run</span>
@@ -1625,13 +1625,13 @@ function App() {
             <div style={styles.hotkeySection}>
               <h3 style={styles.hotkeySectionTitle}>Chart Controls</h3>
               <div style={styles.hotkeyGrid}>
-                <span style={styles.hotkeyKey}>A / D</span><span style={styles.hotkeyDesc}>Move slider window left/right</span>
+                <span style={styles.hotkeyKey}>Q / E</span><span style={styles.hotkeyDesc}>Move slider window left/right</span>
                 <span style={styles.hotkeyKey}>U</span><span style={styles.hotkeyDesc}>Shrink left boundary (inward)</span>
                 <span style={styles.hotkeyKey}>O</span><span style={styles.hotkeyDesc}>Shrink right boundary (inward)</span>
-                <span style={styles.hotkeyKey}>Q</span><span style={styles.hotkeyDesc}>Expand left boundary (outward)</span>
-                <span style={styles.hotkeyKey}>E</span><span style={styles.hotkeyDesc}>Expand right boundary (outward)</span>
-                <span style={styles.hotkeyKey}>S</span><span style={styles.hotkeyDesc}>Toggle Auto Scale (visible data)</span>
-                <span style={styles.hotkeyKey}>F</span><span style={styles.hotkeyDesc}>Toggle Full Scale (entire series)</span>
+                <span style={styles.hotkeyKey}>J</span><span style={styles.hotkeyDesc}>Expand left boundary (outward)</span>
+                <span style={styles.hotkeyKey}>L</span><span style={styles.hotkeyDesc}>Expand right boundary (outward)</span>
+                <span style={styles.hotkeyKey}>A</span><span style={styles.hotkeyDesc}>Toggle Auto Scale (visible data)</span>
+                <span style={styles.hotkeyKey}>S</span><span style={styles.hotkeyDesc}>Toggle Full Scale (entire series)</span>
                 <span style={styles.hotkeyKey}>C</span><span style={styles.hotkeyDesc}>Toggle Colorblind Mode</span>
                 <span style={styles.hotkeyKey}>R</span><span style={styles.hotkeyDesc}>Reset chart view</span>
               </div>
@@ -1640,7 +1640,7 @@ function App() {
             <div style={styles.hotkeySection}>
               <h3 style={styles.hotkeySectionTitle}>Session</h3>
               <div style={styles.hotkeyGrid}>
-                <span style={styles.hotkeyKey}>Esc / Space</span><span style={styles.hotkeyDesc}>Early exit dialog</span>
+                <span style={styles.hotkeyKey}>Esc</span><span style={styles.hotkeyDesc}>Early exit dialog</span>
                 <span style={styles.hotkeyKey}>Y</span><span style={styles.hotkeyDesc}>Confirm / Push to Delta (in dialogs)</span>
                 <span style={styles.hotkeyKey}>N</span><span style={styles.hotkeyDesc}>Cancel / Save for later (in dialogs)</span>
                 <span style={styles.hotkeyKey}>Shift+S</span><span style={styles.hotkeyDesc}>Start Spark cluster</span>
