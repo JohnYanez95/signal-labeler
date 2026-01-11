@@ -43,10 +43,3 @@ class SQLiteUsersRepository(UsersRepository):
             """, (user_name,))
             conn.commit()
             return User(user_id=cursor.lastrowid, user_name=user_name)
-
-    def get_or_create_user(self, user_name: str) -> User:
-        """Get existing user or create if not exists."""
-        user = self.get_user_by_name(user_name)
-        if user:
-            return user
-        return self.create_user(user_name)

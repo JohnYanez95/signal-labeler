@@ -188,11 +188,6 @@ class UsersRepository(ABC):
         """Create a new user."""
         pass
 
-    @abstractmethod
-    def get_or_create_user(self, user_name: str) -> User:
-        """Get existing user or create if not exists."""
-        pass
-
 
 class ModelsRepository(ABC):
     """Interface for managing model types."""
@@ -210,11 +205,6 @@ class ModelsRepository(ABC):
     @abstractmethod
     def create_model(self, model_name: str) -> Model:
         """Create a new model."""
-        pass
-
-    @abstractmethod
-    def get_or_create_model(self, model_name: str) -> Model:
-        """Get existing model or create if not exists."""
         pass
 
 

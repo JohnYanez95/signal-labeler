@@ -43,10 +43,3 @@ class SQLiteModelsRepository(ModelsRepository):
             """, (model_name,))
             conn.commit()
             return Model(model_id=cursor.lastrowid, model_name=model_name)
-
-    def get_or_create_model(self, model_name: str) -> Model:
-        """Get existing model or create if not exists."""
-        model = self.get_model_by_name(model_name)
-        if model:
-            return model
-        return self.create_model(model_name)

@@ -174,24 +174,6 @@ class SQLiteRunsRepository(RunsRepository):
             row = cursor.fetchone()
             return row[0] if row and row[0] is not None else None
 
-    def get_max_value_for_device(
-        self, device_id: str, start_ts: float, end_ts: float
-    ) -> float | None:
-        """Get the maximum timeseries value across ALL runs for a device."""
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT MAX(td.value)
-                FROM timeseries_data td
-                JOIN rle_runs r ON td.run_id = r.run_id
-                WHERE r.device_id = ?
-                  AND r.start_ts >= ?
-                  AND r.end_ts <= ?
-            """, (device_id, start_ts, end_ts))
-
-            row = cursor.fetchone()
-            return row[0] if row and row[0] is not None else None
-
     def get_runs_by_ids(self, run_ids: List[str]) -> List[RunMetadata]:
         """Get metadata for multiple runs by their IDs, preserving order."""
         if not run_ids:

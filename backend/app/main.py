@@ -34,9 +34,7 @@ from app.models import (
     NewSessionRequest,
     NewSessionResponse,
     SessionProgressResponse,
-    PushSessionRequest,
     PushSessionResponse,
-    DeleteSessionRequest,
 )
 from backends.sqlite import (
     SQLiteRunsRepository,
@@ -46,7 +44,7 @@ from backends.sqlite import (
     SQLiteSessionsRepository,
     init_database,
 )
-from sync.cluster import cluster_manager, ClusterStatus
+from sync.cluster import cluster_manager
 
 
 # Initialize database on startup

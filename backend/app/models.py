@@ -194,11 +194,6 @@ class SessionProgressResponse(BaseModel):
     at_80_percent: bool = Field(..., description="True if at or above 80% - trigger cluster start")
 
 
-class PushSessionRequest(BaseModel):
-    """Request to push a session's labels to Delta."""
-    session_id: str
-
-
 class PushSessionResponse(BaseModel):
     """Response after pushing session labels."""
     success: bool
@@ -206,6 +201,3 @@ class PushSessionResponse(BaseModel):
     message: Optional[str] = None
 
 
-class DeleteSessionRequest(BaseModel):
-    """Request to delete a session."""
-    session_id: str
