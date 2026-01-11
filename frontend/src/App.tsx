@@ -79,16 +79,10 @@ function App() {
     currentRun,
     loading,
     error,
-    loadRuns: _loadRuns,
-    loadRunsByIds: _loadRunsByIds,
-    goToNext: _goToNext,
-    goToPrevious: _goToPrevious,
     goToIndex,
     submitLabel,
     restoreSession,
     clearSession,
-    hasNext: _hasNext,
-    hasPrevious: _hasPrevious,
     globalYMax,
   } = useRunsData();
 

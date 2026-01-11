@@ -23,63 +23,6 @@ export function useRunsData() {
   // Abort controller for cancelling preload on session end
   const preloadAbortRef = useRef<AbortController | null>(null);
 
-  const loadRuns = async (
-    deviceId: string,
-    startTs: number,
-    endTs: number,
-    modelType: string,
-    sampleSize: number,
-    labeler?: string
-  ) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await api.sampleRuns({
-        device_id: deviceId,
-        start_ts: startTs,
-        end_ts: endTs,
-        model_type: modelType,
-        sample_size: sampleSize,
-        labeler,  // Pass labeler to only exclude runs labeled by this user
-        unlabeled_only: true,
-      });
-      setRuns(response.runs);
-      setCurrentIndex(0);
-      // Use global_y_max from backend
-      setGlobalYMax(response.global_y_max);
-
-      // Load first run if available
-      if (response.runs.length > 0) {
-        await loadCurrentRun(response.runs[0].run_id, modelType);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load runs');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Load runs by their IDs (for restoring cached sessions)
-  const loadRunsByIds = async (runIds: string[], startIndex: number, modelType: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await api.getRunsByIds(runIds);
-      setRuns(response.runs);
-      setCurrentIndex(startIndex);
-      setGlobalYMax(response.global_y_max);
-
-      // Load the run at the start index
-      if (response.runs.length > 0 && startIndex < response.runs.length) {
-        await loadCurrentRun(response.runs[startIndex].run_id, modelType);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load runs');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Load a single run (checks cache first)
   const loadCurrentRun = async (runId: string, modelType: string, sessionId?: string) => {
     // Check RAM cache first
@@ -152,36 +95,6 @@ export function useRunsData() {
       await Promise.all(promises);
     }
   }, []);
-
-  const goToNext = useCallback((modelType: string, sessionId?: string) => {
-    if (currentIndex < runs.length - 1) {
-      const nextIndex = currentIndex + 1;
-      const targetRunId = runs[nextIndex].run_id;
-      setCurrentIndex(nextIndex);
-      // Check cache synchronously for instant navigation
-      const cached = runsCache.current.get(targetRunId);
-      if (cached) {
-        setCurrentRun(cached);
-      } else {
-        loadCurrentRun(targetRunId, modelType, sessionId);
-      }
-    }
-  }, [currentIndex, runs]);
-
-  const goToPrevious = useCallback((modelType: string, sessionId?: string) => {
-    if (currentIndex > 0) {
-      const prevIndex = currentIndex - 1;
-      const targetRunId = runs[prevIndex].run_id;
-      setCurrentIndex(prevIndex);
-      // Check cache synchronously for instant navigation
-      const cached = runsCache.current.get(targetRunId);
-      if (cached) {
-        setCurrentRun(cached);
-      } else {
-        loadCurrentRun(targetRunId, modelType, sessionId);
-      }
-    }
-  }, [currentIndex, runs]);
 
   const goToIndex = useCallback((index: number, modelType: string, sessionId?: string, runId?: string) => {
     if (index >= 0 && index < runs.length) {
@@ -304,17 +217,10 @@ export function useRunsData() {
     currentRun,
     loading,
     error,
-    loadRuns,
-    loadRunsByIds,
-    goToNext,
-    goToPrevious,
     goToIndex,
     submitLabel,
     restoreSession,
     clearSession,
-    hasNext: currentIndex < runs.length - 1,
-    hasPrevious: currentIndex > 0,
-    globalYMax,  // Max Y value across all cached runs
-    preloadAllRuns,  // Expose for manual preload if needed
+    globalYMax,
   };
 }
